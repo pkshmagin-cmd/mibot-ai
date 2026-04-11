@@ -1,4 +1,4 @@
-name: RunBot
+name: Run mibot.py
 
 on:
   push:
@@ -23,7 +23,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run bot
+      - name: Run mibot.py
         env:
+          # Если ты вставил токен прямо в mibot.py, эта строка просто подстрахует
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: python mibot.py
