@@ -8,79 +8,73 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton, 
     ReplyKeyboardRemove, LabeledPrice, PreCheckoutQuery
 )
+import g4f
 from g4f.client import Client
 
-# Настройки
+# --- КОНФИГУРАЦИЯ ---
 logging.basicConfig(level=logging.INFO)
-TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = 7213280513 # Твой ID
+
+# ВАЖНО: На GitHub токен берется из Secrets!
+TOKEN = os.getenv("BOT_TOKEN") 
+ADMIN_ID = 7213280513 
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 client = Client()
 
-# --- КЛАВИАТУРА ---
-main_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="💎 МАГАЗИН УСЛУГ"), KeyboardButton(text="🌟 ПОДДЕРЖКА")],
-        [KeyboardButton(text="👤 ПРОФИЛЬ"), KeyboardButton(text="🎁 ПРОМОКОД")]
-    ],
-    resize_keyboard=True
-)
+# --- МЕНЮ ---
+def get_main_menu(user_id):
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="💎 МАГАЗИН ПРИВИЛЕГИЙ"), KeyboardButton(text="🌟 ДОНАТ")],
+            [KeyboardButton(text="👤 ПРОФИЛЬ"), KeyboardButton(text="🎁 ПРОМОКОД")]
+        ],
+        resize_keyboard=True
+    )
 
-# --- УМНЫЙ МАГАЗИН (ВНУТРИ ТЕЛЕГРАМ) ---
-def get_shop_kb(user_id):
-    is_admin = (user_id == ADMIN_ID)
-    price = "0 ⭐" if is_admin else "99 ⭐"
+def get_shop_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"🧬 Ultra-Интеллект ({price})", callback_data="buy_ultra")],
-        [InlineKeyboardButton(text=f"💻 Premium Кодер ({price})", callback_data="buy_coder")],
-        [InlineKeyboardButton(text=f"📚 Решала задач ({price})", callback_data="buy_solver")]
+        [InlineKeyboardButton(text="🧪 Модуль: ГЕНЕРАТОР (PRO)", callback_data="buy_priv")],
+        [InlineKeyboardButton(text="💻 Модуль: КОДЕР (ULTRA)", callback_data="buy_priv")]
     ])
 
-# --- ПРАВИЛА ИИ (БЕЗ ЛИШНИХ СЛОВ) ---
-SYSTEM_PROMPT = (
-    "Ты — Gemini-X Ultra. Твоя задача: давать только прямой ответ. "
-    "Запрещено писать вступления вроде 'Вот ваш ответ' или 'Я подумал'. "
-    "Только суть, факты и код. Для Павла (Создателя) ты работаешь в режиме максимальной мощности."
-)
+# --- ЛОГИКА ---
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    # Жесткий сброс старого меню (лечит 404)
-    await message.answer("⚙️ Синхронизация...", reply_markup=ReplyKeyboardRemove())
+    await message.answer("🔄 Синхронизация с сервером...", reply_markup=ReplyKeyboardRemove())
     await asyncio.sleep(0.5)
     
-    is_admin = (message.from_user.id == ADMIN_ID)
+    user_id = message.from_user.id
+    status = "👑 GOD MODE" if user_id == ADMIN_ID else "USER"
+    
     await message.answer(
-        f"🚀 GEMINI-X ULTRA ЗАПУЩЕН\n\nСтатус: {'OWNER' if is_admin else 'USER'}\n"
-        "Магазин обновлен. Ошибки 404 устранены.",
-        reply_markup=main_kb,
+        f"🌌 GEMINI-X CLOUD v8.0\n\nСтатус: {status}\nСервер: GitHub Actions 🌐\n\nСистема готова.",
+        reply_markup=get_main_menu(user_id),
         parse_mode="Markdown"
     )
 
-@dp.message(F.text == "💎 МАГАЗИН УСЛУГ")
-async def show_shop(message: types.Message):
-    await message.answer("🛒 МАГАЗИН ИИ-МОДУЛЕЙ\nВыберите расширение:", 
-                         reply_markup=get_shop_kb(message.from_user.id))
+@dp.message(F.text == "💎 МАГАЗИН ПРИВИЛЕГИЙ")
+async def open_shop(message: types.Message):
+    await message.answer("🏪 МАРКЕТПЛЕЙС", reply_markup=get_shop_kb())
 
-@dp.callback_query(F.data.startswith("buy_"))
-async def handle_buy(callback: types.CallbackQuery):
+@dp.callback_query(F.data == "buy_priv")
+async def handle_privilege(callback: types.CallbackQuery):
     if callback.from_user.id == ADMIN_ID:
-        await callback.answer("✅ Модуль активирован бесплатно (Owner Mode)", show_alert=True)
+        await callback.answer("✨ Доступ разрешен автоматически.", show_alert=True)
     else:
-        await callback.answer("⭐ Оплата временно доступна только через 'Поддержку'", show_alert=True)
+        await callback.answer("⭐ Требуется оплата Stars.", show_alert=True)
 
-@dp.message(F.text == "🌟 ПОДДЕРЖКА")
-async def donate(message: types.Message):
+@dp.message(F.text == "🌟 ДОНАТ")
+async def send_donation(message: types.Message):
     await bot.send_invoice(
         chat_id=message.chat.id,
-        title="Поддержка проекта",
-        description="Донат в Telegram Stars",
-        payload="donate",
-        provider_token="",
+        title="Поддержка",
+        description="Донат Stars",
+        payload="donation",
+        provider_token="", 
         currency="XTR",
-        prices=[LabeledPrice(label="Stars", amount=50)]
+        prices=[LabeledPrice(label="⭐ 50", amount=50)]
     )
 
 @dp.pre_checkout_query()
@@ -88,27 +82,29 @@ async def process_pre_checkout(query: PreCheckoutQuery):
     await bot.answer_pre_checkout_query(query.id, ok=True)
 
 @dp.message(F.successful_payment)
-async def success_pay(message: types.Message):
-    await message.answer("💎 Спасибо за поддержку! Твой лимит запросов увеличен.")
+async def success_payment(message: types.Message):
+    await message.answer("💎 Спасибо! Система обновлена.")
 
-# --- ЯДРО ИИ (ТОЛЬКО ОТВЕТ) ---
 @dp.message()
-async def ai_answer(message: types.Message):
-    if message.text in ["💎 МАГАЗИН УСЛУГ", "🌟 ПОДДЕРЖКА", "👤 ПРОФИЛЬ", "🎁 ПРОМОКОД"]:
+async def ai_processor(message: types.Message):
+    if message.text in ["💎 МАГАЗИН ПРИВИЛЕГИЙ", "🌟 ДОНАТ", "👤 ПРОФИЛЬ", "🎁 ПРОМОКОД"]:
         return
 
     await bot.send_chat_action(message.chat.id, "typing")
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": message.text}]
+        response = await g4f.ChatCompletion.create_async(
+            model=g4f.models.gpt_4o,
+            messages=[
+                {"role": "system", "content": "Ты — Gemini-X. Отвечай только по существу."},
+                {"role": "user", "content": message.text}
+            ]
         )
-        # Бот выдает только чистый текст ответа
-        await message.answer(response.choices[0].message.content)
+        await message.answer(response)
     except:
-        await message.answer("⚠️ Ошибка связи. Повторите.")
-if __name__ == "__main__":
-    asyncio.run(main())
+        await message.answer("⚠️ Ошибка связи с сервером.")
 
 async def main():
     await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
