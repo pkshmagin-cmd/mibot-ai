@@ -77,16 +77,15 @@ async def shop_callback(callback: types.CallbackQuery):
 
 @dp.message(F.text == "🌟 ДОНАТ")
 async def send_donation(message: types.Message):
-    await bot.send_invoice(
-        chat_id=message.chat.id,
-        title="Поддержка",
-        description="Донат в Stars",
-        payload="donation",
-        provider_token=""
-        currency="XTR",
-        
-prices=[LabeledPrice(label="⭐ 50", amount=50)]
-    )
+   await bot.send_invoice(
+            chat_id=message.chat.id,
+            title="Поддержка",
+            description="Донат в Stars",
+            payload="donation",
+            provider_token="",
+            currency="XTR",
+            prices=[LabeledPrice(label="⭐ 50", amount=50)]
+        )
 
 @dp.pre_checkout_query()
 async def process_pre_checkout(query: PreCheckoutQuery):
