@@ -82,9 +82,10 @@ async def send_donation(message: types.Message):
         title="Поддержка",
         description="Донат в Stars",
         payload="donation",
-        provider_token="", 
+        provider_token=""
         currency="XTR",
-        prices=[LabeledPrice(label="⭐ 50", amount=50)]
+        
+prices=[LabeledPrice(label="⭐ 50", amount=50)]
     )
 
 @dp.pre_checkout_query()
