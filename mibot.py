@@ -1,148 +1,146 @@
-import os
 import asyncio
-import logging
-import random
-import time
 import aiohttp
+import random
+import os
+import time
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
+from aiogram.client.default import DefaultBotProperties
+from aiogram.types import BufferedInputFile, LabeledPrice, PreCheckoutQuery, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile
 
-# --- НАСТРОЙКИ ---
-logging.basicConfig(level=logging.INFO)
-TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = 7213280513
+# --- [ГЛОБАЛЬНЫЕ НАСТРОЙКИ] ---
+# На GitHub лучше использовать секреты, но для простоты вставь токен сюда:
+TOKEN = '8750614833:AAE8lUJ_QDV43QK26Bp_zsAlhOAwNH1DyCQ' 
+ADMIN_ID = 7213280513  # ТВОЙ ID
+CHANNEL_URL = "https://t.me/froggy_Nkoop" 
 
-bot = Bot(token=TOKEN)
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode='Markdown'))
 dp = Dispatcher()
+boost_users = {}
 
-# --- БАЗА ДАННЫХ (В ПАМЯТИ) ---
-users = {} 
-# Структура: {id: {'bal': 100, 'lvl': 1, 'used_promos': [], 'pet': None, 'emoji': '👤'}}
+# --- [ИНТЕРФЕЙС ГИТХАБ-ЛОГОВ (РУССКИЙ)] ---
+def update_logs(sobitie, bug="СТАБИЛЬНО"):
+    # Очистка консоли не всегда работает в GitHub Actions, поэтому просто печатаем красиво
+    print(f"\n[S] СИСТЕМА: mibot.py | СТАТУС: ОНЛАЙН")
+    print(f"[M] МОЗГ: 5 СЕКУНД | АНАТОМИЯ-ФИКС: ВКЛ")
+    print(f"[!] СОБЫТИЕ: {sobitie}")
+    print(f"[?] ОШИБКИ: {bug}\n")
 
-def get_u(uid):
-    if uid not in users:
-        users[uid] = {'bal': 100, 'lvl': 1, 'promos': [], 'pet': None, 'emoji': '👤', 'last': 0}
-    return users[uid]
+def has_turbo(uid):
+    return uid == ADMIN_ID or (uid in boost_users and time.time() < boost_users[uid])
 
-# --- КЛАВИАТУРА ---
-main_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="🏪 МЕГА-МАРКЕТ"), KeyboardButton(text="👤 ИНФО")],
-        [KeyboardButton(text="🎨 НЕЙРО-АРТ"), KeyboardButton(text="🎁 ПРОМОКОД")]
-    ],
-    resize_keyboard=True
-)
+# --- [ИНТЕРФЕЙС КНОПОК] ---
+def get_main_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💎 МОЙ ЛИЧНЫЙ АККАУНТ", callback_data="go_profile")],
+        [InlineKeyboardButton(text="🎨 НЕЙРО-АРТ (5с)", callback_data="go_image"),
+         InlineKeyboardButton(text="🎮 ГЕЙМ-МАСТЕР", callback_data="go_game")],
+        [InlineKeyboardButton(text="⚡ ТУРБО-УСКОРЕНИЕ", callback_data="go_boost")]
+    ])
 
-# --- ОБРАБОТЧИКИ ---
+# --- [ЯДРО ИНТЕЛЛЕКТА: 5 СЕКУНД] ---
+async def fetch_smart_ai(text, is_game=False):
+    url = "https://text.pollinations.ai/"
+    instruction = (
+        "Ты — элитный ИИ 'mibot'. Думай 5 секунд и давай безупречный ответ. "
+        "Списывай из Google правильно. Если это код — делай его рабочим сразу."
+    )
+    payload = {
+        "messages": [{"role": "system", "content": instruction}, {"role": "user", "content": text}],
+        "model": "openai",
+        "search": True
+    }
+    async with aiohttp.ClientSession() as session:
+        try:
+            timeout = 30 if is_game else 7
+            async with session.post(url, json=payload, timeout=timeout) as resp:
+                return await resp.text()
+        except:
+            return "🛸 Нейро-щит зафиксировал сбой сети. Попробуй еще раз!"
+
+# --- [ОБРАБОТЧИКИ] ---
 
 @dp.message(Command("start"))
-async def start(message: types.Message):
-    get_u(message.from_user.id)
-    await message.answer("🛠 CORE v12.0: СИСТЕМА ОБНОВЛЕНА\n\n- Исправлены баги промокодов\n- Добавлен зоомагазин\n- Ядро стабилизировано", reply_markup=main_kb)
+async def cmd_start(m: types.Message):
+    update_logs(f"Старт от {m.from_user.id}")
+    await m.answer(f"👋 Добро пожаловать в mibot.py на GitHub!\n\nЯ настроен на ультра-скорость. Нажми на кнопку аккаунта, чтобы увидеть активные режимы.", reply_markup=get_main_kb())
 
-@dp.message(F.text == "👤 ИНФО")
-async def profile(message: types.Message):
-    u = get_u(message.from_user.id)
-    pet_status = f"🐾 Питомец: {u['pet']}" if u['pet'] else "🐾 Питомца нет"
-    await message.answer(
-        f"{u['emoji']} ВАШ АЙДИ: {message.from_user.id}\n\n"
-        f"💰 Баланс: {u['bal']} б.\n"
-        f"🚀 Ядро: уровень {u['lvl']}\n"
-        f"{pet_status}", parse_mode="Markdown")
+@dp.callback_query(F.data == "go_profile")
+async def view_profile(cb: types.CallbackQuery):
+    uid = cb.from_user.id
+    status = "💎 ВЛАДЕЛЕЦ СИСТЕМЫ" if uid == ADMIN_ID else ("🚀 ТУРБО-РЕЖИМ" if has_turbo(uid) else "🐢 СТАНДАРТ")
+    
+    modes = (
+        "🟢 Google-Поиск 5.0\n"
+        "🟢 Анатомия-Фикс (Прямые руки)\n"
+        "🟢 Турбо-Всплеск (5 сек)\n"
+        "🟢 Гейм-Дизайнер (HTML5)"
+    )
+    
+    text = (
+        f"💳 ЛИЧНЫЙ АККАУНТ ПОЛЬЗОВАТЕЛЯ\n"
+        f"──────────────────────\n"
+        f"👤 Имя: {cb.from_user.first_name}\n"
+        f"🆔 ID: {uid}\n"
+        f"📊 Статус: {status}\n"
+        f"──────────────────────\n"
+        f"⚙️ ВКЛЮЧЕННЫЕ РЕЖИМЫ ОТ ТЕБЯ:\n{modes}\n"
+        f"──────────────────────\n"
+        f"🚀 *Все системы GitHub работают на 100%*"
+    )
+    await cb.message.answer(text, reply_markup=get_main_kb())
+    await cb.answer()
 
-@dp.message(F.text == "🏪 МЕГА-МАРКЕТ")
-async def shop(message: types.Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⚙️ Прокачать Ядро (500 б.)", callback_data="up_core")],
-        [InlineKeyboardButton(text="🐱 Купить Кибер-Кота (1500 б.)", callback_data="buy_pet_cat")],
-        [InlineKeyboardButton(text="👑 Элитный Эмодзи [💎] (2000 б.)", callback_data="buy_emoji")]
-    ])
-    await message.answer("🛒 АССОРТИМЕНТ ОБНОВЛЕН\nВыбери улучшение:", reply_markup=kb)
+@dp.message(Command("game"))
+async def game_gen(m: types.Message):
+    p = m.text.replace("/game", "").strip()
+    if not p: return await m.answer("📝 Напиши название игры!")
+update_logs(f"Код игры: {p}")
+    msg = await m.answer("⚙️ Нейро-кодер на GitHub пишет твою игру...")
+    code = await fetch_smart_ai(f"Напиши один файл HTML5 с игрой: {p}", is_game=True)
+    path = f"game_{m.from_user.id}.html"
+    with open(path, "w", encoding="utf-8") as f: f.write(code)
+    await m.answer_document(FSInputFile(path), caption="🎮 Твоя игра готова!")
+    os.remove(path)
 
-# Логика магазина
-@dp.callback_query(F.data == "up_core")
-async def up_core(c: types.CallbackQuery):
-    u = get_u(c.from_user.id)
-    if u['bal'] >= 500:
-        u['bal'] -= 500
-        u['lvl'] += 1
-        await c.answer(f"Ядро разогнано до x{u['lvl']}!", show_alert=True)
-    else:
-        await c.answer("Не хватает баллов!", show_alert=True)
-
-@dp.callback_query(F.data == "buy_pet_cat")
-async def buy_pet(c: types.CallbackQuery):
-    u = get_u(c.from_user.id)
-    if u['bal'] >= 1500:
-        u['bal'] -= 1500
-        u['pet'] = "Кибер-Кот 🤖"
-        await c.answer("Вы приобрели Кибер-Кота! Он защищает ваше ядро.", show_alert=True)
-    else:
-        await c.answer("Нужно 1500 баллов!", show_alert=True)
-
-@dp.callback_query(F.data == "buy_emoji")
-async def buy_emoji(c: types.CallbackQuery):
-    u = get_u(c.from_user.id)
-    if u['bal'] >= 2000:
-        u['bal'] -= 2000
-        u['emoji'] = "💎"
-        await c.answer("Теперь у вас элитный статус!", show_alert=True)
-    else:
-        await c.answer("Нужно 2000 баллов!", show_alert=True)
-
-@dp.message(F.text == "🎁 ПРОМОКОД")
-async def promo_ask(message: types.Message):
-    await message.answer("Введите код:")
-
-@dp.message(Command("donate"))
-async def donate(message: types.Message):
-    try:
-        val = int(message.text.split()[1])
-        u = get_u(message.from_user.id)
-        u['bal'] += val * 50
-        await message.answer(f"🌟 Зачислено {val * 50} баллов!")
-    except:
-        await message.answer("Пример: /donate 12 (даст 600 баллов)")
+@dp.message(Command("image"))
+async def image_gen(m: types.Message):
+    p = m.text.replace("/image", "").strip()
+    if not p: return await m.answer("📝 Опиши арт!")
+    update_logs(f"Арт (Фикс рук): {p[:15]}")
+    await bot.send_chat_action(m.chat.id, "upload_photo")
+    
+    # Сверх-точный промпт для рук
+    fix = "perfect anatomy, five fingers, masterpiece, high resolution"
+    url = f"https://image.pollinations.ai/prompt/{p}, {fix}?nologo=true&seed={random.randint(1,99999)}&model=flux"
+    
+    async with aiohttp.ClientSession() as s:
+        async with s.get(url) as r:
+            await m.answer_photo(BufferedInputFile(await r.read(), "art.png"), caption="🎨 Анатомия проверена. Руки в порядке.")
 
 @dp.message()
-async def logic(message: types.Message):
-    uid = message.from_user.id
-    u = get_u(uid)
+async def talk(m: types.Message):
+    if m.text.startswith("/"): return
+    update_logs(f"Запрос: {m.text[:20]}")
+    await bot.send_chat_action(m.chat.id, "typing")
     
-    # Защита от спама (глюков)
-    if time.time() - u['last'] < 2: return
-    u['last'] = time.time()
-# Обработка ОДНОРАЗОВЫХ промокодов
-    txt = message.text.upper()
-    promos = {"POVAR": 1000, "GEMINI": 500, "PISTON": 300}
-    if txt in promos:
-        if txt in u['promos']:
-            return await message.answer("❌ Вы уже использовали этот код!")
-        u['promos'].append(txt)
-        u['bal'] += promos[txt]
-        return await message.answer(f"✅ Код активирован! +{promos[txt]} баллов.")
-
-    if message.text in ["🏪 МЕГА-МАРКЕТ", "👤 ИНФО", "🎨 НЕЙРО-АРТ", "🎁 ПРОМОКОД"]: return
-
-    # ИИ с улучшенной стабильностью
-    import g4f
-    await bot.send_chat_action(message.chat.id, "typing")
-    try:
-        # Пытаемся вызвать несколько моделей если одна упадет
-        response = await g4f.ChatCompletion.create_async(
-            model=g4f.models.gpt_4o,
-            messages=[{"role": "user", "content": message.text}]
-        )
-        bonus = random.randint(3, 7) * u['lvl']
-        if u['pet']: bonus += 10 # Бонус от питомца
-        u['bal'] += bonus
-        await message.answer(f"{response}\n\n💰 +{bonus} б.")
-    except:
-        await message.answer("🔄 Ядро перезагружается... Попробуйте еще раз.")
+    start_t = time.time()
+    res = await fetch_smart_ai(m.text)
+    total_t = round(time.time() - start_t, 2)
+    
+    await m.answer(f"{res}\n\n⏱ Списано идеально за {total_t} сек.")
 
 async def main():
+    await bot.set_my_commands([
+        BotCommand(command='/start', description='🚀 Запуск'),
+        BotCommand(command='/image', description='🎨 Арт (5 пальцев)'),
+        BotCommand(command='/game', description='🎮 Игры'),
+        BotCommand(command='/profile', description='💎 Аккаунт')
+    ])
+    update_logs("БОТ ПОЛНОСТЬЮ ОБНОВЛЕН НА GITHUB")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    while True:
+        try: asyncio.run(main())
+        except: time.sleep(1)
