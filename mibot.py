@@ -1,128 +1,88 @@
+import os
 import asyncio
-import sqlite3
-import random
-import string
+import logging
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command, CommandObject
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.types import BotCommand
+from aiogram.filters import Command
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from g4f.client import Client
 
-# === КОНФИГУРАЦИЯ ===
-TOKEN = '8750614833:AAE8lUJ_QDV43QK26Bp_zsAlhOAwNH1DyCQ'
+logging.basicConfig(level=logging.INFO)
 
-ADMIN_ID = 7213280513  # ВСТАВЬ СВОЙ ID
-WEB_APP_URL = "https://твой-логин.github.io/index.html" 
+# --- НАСТРОЙКИ ---
+TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = 7213280513  # <--- ВСТАВЬ СЮДА СВОЙ ID ИЗ @userinfobot
 
-bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
+bot = Bot(token=TOKEN)
 dp = Dispatcher()
+client = Client()
 
-# Инициализация БД
-def init_db():
-    conn = sqlite3.connect("users_data.db")
-    conn.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, status TEXT DEFAULT "user")')
-    conn.execute('CREATE TABLE IF NOT EXISTS promocodes (code TEXT PRIMARY KEY)')
-    conn.commit()
-    conn.close()
+# --- КЛАВИАТУРА ---
+main_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="⚡ Действия"), KeyboardButton(text="🎁 Промокоды")],
+        [KeyboardButton(text="🧠 Спросить ИИ"), KeyboardButton(text="👑 Мой профиль")]
+    ],
+    resize_keyboard=True
+)
 
-def get_status(user_id):
-    if user_id == ADMIN_ID: return "creator"
-    conn = sqlite3.connect("users_data.db")
-    res = conn.execute("SELECT status FROM users WHERE id = ?", (user_id,)).fetchone()
-    conn.close()
-    return res[0] if res else "user"
-
-# Установка списка команд в интерфейс Telegram
-async def setup_bot_commands(bot: Bot):
-    main_commands = [
-        BotCommand(command="start", description="🚀 Запустить бота"),
-        BotCommand(command="promo", description="🎟 Активировать код"),
-        BotCommand(command="shop", description="💎 Магазин привилегий")
-    ]
-    await bot.set_my_commands(main_commands)
-
-# --- ОБРАБОТЧИКИ КОМАНД ---
+SYSTEM_PROMPT = "Ты — универсальный гений-помощник. Для создателя ты максимально предан, для остальных — крутой ментор."
 
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message):
-    user_id = message.from_user.id
-    conn = sqlite3.connect("users_data.db")
-    conn.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
-    conn.commit()
-    conn.close()
+async def start_cmd(message: types.Message):
+    welcome = "Привет! Я твой мощный ИИ-бот."
+    if message.from_user.id == ADMIN_ID:
+        welcome = "Приветствую, Создатель! 👑 Все системы работают для тебя бесплатно."
     
-    kb = [[types.InlineKeyboardButton(text="💎 ОТКРЫТЬ МАГАЗИН", web_app=types.WebAppInfo(url=WEB_APP_URL))]]
-    await message.answer(
-        f"🌟 AI PROJECT 2026\n\n"
-        f"Привет, {message.from_user.first_name}!\n"
-        f"💬 Чат со мной — БЕСПЛАТНО.\n"
-        f"🎨 Картинки доступны в Premium.\n\n"
-        "Используй меню команд для навигации!",
-        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=kb)
+    await message.answer(welcome, reply_markup=main_keyboard)
+
+# --- СПИСОК ДЕЙСТВИЙ (ВМЕСТО МАГАЗИНА) ---
+@dp.message(F.text == "⚡ Действия")
+async def actions_list(message: types.Message):
+    if message.from_user.id == ADMIN_ID:
+        status = "✅ Для тебя всё БЕСПЛАТНО"
+    else:
+        status = "💰 Оплата: Telegram Stars"
+
+    text = (
+        f"🚀 Список доступных возможностей:\n\n"
+        f"1. Глубокий анализ кода\n"
+        f"2. Решение сложных задач\n"
+        f"3. Генерация идей и текстов\n\n"
+        f"Твой статус: {status}"
     )
+    await message.answer(text)
 
-@dp.message(Command("shop"))
-async def cmd_shop(message: types.Message):
-    kb = [[types.InlineKeyboardButton(text="💎 ПЕРЕЙТИ В МАГАЗИН", web_app=types.WebAppInfo(url=WEB_APP_URL))]]
-    await message.answer("Выберите пакет услуг:", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=kb))
-
-@dp.message(Command("addpromo"))
-async def add_promo(message: types.Message, command: CommandObject):
-    if message.from_user.id != ADMIN_ID: return
-    code = command.args.upper() if command.args else "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    conn = sqlite3.connect("users_data.db")
-    try:
-        conn.execute("INSERT INTO promocodes (code) VALUES (?)", (code,))
-        conn.commit()
-        await message.answer(f"✅ Промокод создан: {code}")
-    except:
-        await message.answer("❌ Ошибка (возможно, код уже существует).")
-    conn.close()
+# --- ПРОМОКОДЫ ---
+@dp.message(F.text == "🎁 Промокоды")
+async def promo_menu(message: types.Message):
+    await message.answer("Введи код: /promo ТВОЙ_КОД", parse_mode="Markdown")
 
 @dp.message(Command("promo"))
-async def use_promo(message: types.Message, command: CommandObject):
-    if not command.args:
-        return await message.answer("Введите код: /promo КОД")
-    
-    code = command.args.upper()
-    conn = sqlite3.connect("users_data.db")
-    res = conn.execute("SELECT code FROM promocodes WHERE code = ?", (code,)).fetchone()
-    
-    if res:
-        conn.execute("UPDATE users SET status = 'premium' WHERE id = ?", (message.from_user.id,))
-        conn.execute("DELETE FROM promocodes WHERE code = ?", (code,))
-        conn.commit()
-        await message.answer("🎉 Успех! Premium статус активирован.")
+async def use_promo(message: types.Message):
+    code = message.text.replace("/promo ", "").strip().upper()
+    if code == "CREATOR":
+        await message.answer("👑 Режим Бога активирован!")
     else:
-        await message.answer("❌ Код недействителен.")
-    conn.close()
+        await message.answer("❌ Неверный код.")
 
 # --- УМНЫЙ ЧАТ ---
 @dp.message()
-async def main_chat(message: types.Message):
-    if not message.text: return
-    status = get_status(message.from_user.id)
-    text = message.text.lower()
-# Проверка на запрос картинки
-    if any(word in text for word in ["нарисуй", "картинка", "сделай фото"]):
-        if status in ["creator", "premium"]:
-            await message.answer("🎨 Нейросеть начала рисовать... Опишите детали!")
-        else:
-            await message.answer("❌ Рисование доступно только в Premium.")
+async def universal_handler(message: types.Message):
+    if message.text in ["⚡ Действия", "🧠 Спросить ИИ", "👑 Мой профиль"]:
+        await message.answer("Я слушаю! Присылай задачу.")
         return
 
-    # Ответ ИИ
-    if status == "creator":
-        # Спец-ответ для тебя
-        await message.answer(f"🚀 Слушаю, Создатель! Твой запрос принят без лимитов.\n\n🤖 ИИ: Я обработал запрос {message.text}. Система работает стабильно.")
-    else:
-        # Обычный ответ (бесплатно)
-        await message.answer(f"🤖 ИИ: Ваш вопрос принят! Я готов общаться с вами бесплатно.")
+    await bot.send_chat_action(message.chat.id, "typing")
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": message.text}]
+        )
+        await message.answer(response.choices[0].message.content)
+    except Exception:
+        await message.answer("Произошла заминка, попробуй еще раз!")
 
 async def main():
-    init_db()
-    await setup_bot_commands(bot) # Настройка меню команд
-    print("--- БОТ ЗАПУЩЕН И ГОТОВ К РАБОТЕ ---")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
