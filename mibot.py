@@ -6,10 +6,10 @@ from aiogram.fsm.state import State,StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 
-# --- КОНФИГ ---
-TOKEN, MY_ID, CH_LINK = '8750614833:AAE8lUJ_QDV43QK26Bp_zsAlhOAwNH1DyCQ', 7213280513, "https://t.me/froggy_Nkoop"
-# Сюда впиши свою будущую ссылку GitHub Pages (например: https://твойник.github.io/название-репо/)
-GITHUB_PAGE_URL = "https://github.com/твойник/твойрепо" 
+# --- НАСТРОЙКИ ---
+TOKEN = '8750614833:AAE8lUJ_QDV43QK26Bp_zsAlhOAwNH1DyCQ'
+MY_ID = 7213280513
+CH_LINK = "https://t.me/froggy_Nkoop"
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode='Markdown'))
 dp = Dispatcher(storage=MemoryStorage())
@@ -20,7 +20,7 @@ class States(StatesGroup):
     anon_chat = State()
 
 async def ai_call(uid, txt):
-    sys = "Ты TITAN 2026 (Gemini). Пиши ТОЛЬКО код HTML5+JS. Сделай код адаптивным под мобильные экраны Telegram."
+    sys = "Ты TITAN 2026 (Gemini). Пиши ТОЛЬКО код HTML5+JS. Без лишних слов."
     if uid not in user_history: user_history[uid] = [{"role": "system", "content": sys}]
     user_history[uid].append({"role": "user", "content": txt})
     try:
@@ -33,7 +33,7 @@ async def ai_call(uid, txt):
                     res = re.sub(r'<reasoning_content>.*?</reasoning_content>|\{.*?\}', '', res, flags=re.DOTALL)
                     return res.strip()
     except: pass
-    return "🚀 Ошибка генерации кода."
+    return "🚀 TITAN: Ошибка связи."
 
 async def anim(m, steps):
     msg = await m.answer(steps[0])
@@ -46,60 +46,72 @@ async def anim(m, steps):
 @dp.message(F.text == "/start")
 async def cmd_start(m: types.Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📸 Цветное Фото", callback_data="b_dr"), InlineKeyboardButton(text="🕹 WebApp для GitHub", callback_data="b_gm")],
+        [InlineKeyboardButton(text="📸 Фото (Цвет)", callback_data="b_dr"), InlineKeyboardButton(text="🕹 WebApp Игра", callback_data="b_gm")],
         [InlineKeyboardButton(text="🌟 SUPPORT ⭐10", callback_data="buy_stars")],
-        [InlineKeyboardButton(text="🧱 Анонимный Чат", callback_data="b_an")]
+        [InlineKeyboardButton(text="🧱 Чат 🎤", callback_data="b_an"), InlineKeyboardButton(text="✍️ Отзыв", callback_data="b_fd")]
     ])
-    await m.answer("🚀 **TITAN ULTRA 2026 (GitHub Ready)**\n\nТеперь я готовлю код специально для размещения на GitHub Pages!", reply_markup=kb)
+    await m.answer("🚀 **TITAN ULTRA 2026 (FIXED)**\n\n✅ Ошибки запуска исправлены\n✅ Фото только в цвете\n✅ Игры готовы для GitHub", reply_markup=kb)
+
+@dp.callback_query(F.data == "buy_stars")
+async def pay_stars(c: types.CallbackQuery):
+    try: await bot.send_invoice(c.from_user.id, title="Support", description="⭐10", payload="stars", currency="XTR", prices=[LabeledPrice(label="⭐", amount=10)])
+    except: await c.message.answer(f"🌟 Линк: {CH_LINK}")
+    await c.answer()
+
+@dp.callback_query(F.data.startswith("b_"))
+async def handle_buttons(c: types.CallbackQuery, state: FSMContext):
+    if c.data == "b_an":
+        btns = [[InlineKeyboardButton(text=f"👤 {v['name']}", callback_data=f"inv_{id}")] for id, v in online_users.items() if id != c.from_user.id]
+        await c.message.answer("🌐 Онлайн:" if btns else "📭 Ждем...", reply_markup=InlineKeyboardMarkup(inline_keyboard=btns) if btns else None)
+    elif c.data == "b_dr": await c.message.answer("📸 Опиши цветное фото:")
+    elif c.data == "b_gm": await c.message.answer("🕹 Какую игру создать для GitHub?")
+    elif c.data == "b_fd": await c.message.answer("📝 Отзыв:"); await state.set_state(States.feedback)
+    await c.answer()
+
+@dp.callback_query(F.data.startswith("inv_"))
+async def handle_invite(c: types.CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Да", callback_data=f"acc_{c.from_user.id}"), InlineKeyboardButton(text="❌", callback_data="deny")]])
+    await bot.send_message(int(c.data.split("_")[1]), f"🔔 Запрос от {c.from_user.first_name}!", reply_markup=kb); await c.answer("📡 Ушло.")
+
+@dp.callback_query(F.data.startswith("acc_"))
+async def handle_accept(c: types.CallbackQuery, state: FSMContext):
+    u1, u2 = c.from_user.id, int(c.data.split("_")[1])
+    active_chats[u1], active_chats[u2] = u2, u1
+    await state.set_state(States.anon_chat); await dp.fsm.get_context(bot, user_id=u2, chat_id=u2).set_state(States.anon_chat)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ СТОП", callback_data="stop_now")]])
+    for u in [u1, u2]: await bot.send_message(u, "💎 ЧАТ АКТИВЕН! (Текст + ГС 🎤)", reply_markup=kb)
+    await c.message.delete(); await c.answer()
 
 @dp.message()
 async def handle_main(m: types.Message, state: FSMContext):
     uid = m.from_user.id
     online_users[uid] = {"name": m.from_user.first_name, "t": time.time()}
-    
-    # Обработка анонимного чата
     if await state.get_state() == States.anon_chat and uid in active_chats:
-        target = active_chats[uid]
-        if m.text: await bot.send_message(target, f"📩: {m.text}")
-        elif m.voice: await bot.send_voice(target, m.voice.file_id)
+        target, kb = active_chats[uid], InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ СТОП", callback_data="stop_now")]])
+        if m.text: await bot.send_message(target, f"📩: {m.text}", reply_markup=kb)
+        elif m.voice: await bot.send_voice(target, m.voice.file_id, reply_markup=kb)
         return
-
+    if await state.get_state() == States.feedback:
+        await bot.send_message(MY_ID, f"🆘 ОТЗЫВ: {m.from_user.full_name}: {m.text}"); await m.answer("✅!"); await state.clear(); return
     txt = m.text.lower() if m.text else ""
-    
-    # Генерация фото (Цветные)
-    if any(x in txt for x in ["нарисуй", "фото"]):
-        st = await anim(m, ["🛰 Gemini Vision...", "🎨 Только Цвет (Flux)..."])
+    if any(x in txt for x in ["нарисуй", "фото", "арт"]):
+        st = await anim(m, ["🛰 Gemini Vision...", "🎨 Только Цвет..."])
         p = urllib.parse.quote(f"{txt}, strictly color, vivid, 8k, raw photo")
         url = f"https://image.pollinations.ai/prompt/{p}?width=1024&height=1240&model=flux&nologo=true"
-        await m.answer_photo(url, caption="🖼 **TITAN COLOR 2026**"); await st.delete(); return
-
-   # Генерация Игр для GitHub
+        await m.answer_photo(url, caption="🖼 **TITAN 2026**"); await st.delete(); return
     if m.text:
-        st = await anim(m, ["🧠 Gemini пишет код...", "📂 Подготовка для GitHub..."])
+        st = await anim(m, ["🧠 Gemini размышляет...", "🕹 Сборка WebApp..."])
         res = await ai_call(uid, m.text); await st.delete()
         if any(x in res.lower() for x in ["<html", "doctype"]):
-            # Генерируем файл index.html
             file = BufferedInputFile(res.encode(), filename="index.html")
-            
-            # Ссылка через pollinations для мгновенного теста (пока ты не залил на GitHub)
-            webapp_url = f"https://pollinations.ai/p/{random.randint(1,9999)}?preview=true&code={urllib.parse.quote(res)}"
-            
-            kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🎮 ТЕСТ WEBAPP (В Telegram)", web_app=WebAppInfo(url=webapp_url))],
-                [InlineKeyboardButton(text="📦 ИНСТРУКЦИЯ ДЛЯ GITHUB", callback_data="gh_info")]
-            ])
-            
-            await m.answer_document(file, caption="✅ **Код для GitHub готов!**\n\n1. Создай репозиторий на GitHub\n2. Загрузи туда этот файл под именем `index.html`\n3. Включи GitHub Pages\n4. Полученную ссылку вставь в настройки WebApp!")
-            await m.answer("🕹 Можешь протестировать игру прямо сейчас:", reply_markup=kb)
+            kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎮 ТЕСТ WEBAPP", web_app=WebAppInfo(url=f"https://pollinations.ai/p/{random.randint(1,999)}?preview=true&code={urllib.parse.quote(res)}"))]])
+            await m.answer_document(file, caption="✅ Файл `index.html` для GitHub готов!")
+            await m.answer("🕹 Запусти игру:", reply_markup=kb)
         else: await m.answer(res)
-
-@dp.callback_query(F.data == "gh_info")
-async def gh_info(c: types.CallbackQuery):
-    await c.message.answer("📝 **Как запустить это на GitHub:**\n\n1. Зайди на github.com и создай новый репозиторий.\n2. Нажми 'Add file' -> 'Upload files' и перетащи туда файл `index.html`.\n3. Перейди в 'Settings' -> 'Pages'.\n4. В разделе Build and deployment выбери ветку 'main' и нажми 'Save'.\n5. Через минуту GitHub даст тебе ссылку `https://...`. Её и используй!")
-    await c.answer()
 
 if __name__ == "__main__":
     async def run():
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
     asyncio.run(run())
+@dp.callback_query(F.data.startswith("inv_"))
